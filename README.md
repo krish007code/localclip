@@ -68,16 +68,21 @@ A small toast appears in the bottom-right corner confirming the result.
 # 1. Clone and enter the repo
 cd localclip
 
-# 2. Edit config.json — set token to the same value you put in the script
-#    (model, port, and other defaults are fine as-is for a first run)
+# 2. First-run: create your personal config
+cp config.example.json config.json
 
-# 3. Start Ollama and pull a model (first time only)
+# 3. Generate a token and set it in both places
+openssl rand -hex 16
+#   → paste the output into config.json  ("token" field)
+#   → paste the same value into the userscript TOKEN constant
+
+# 4. Start Ollama and pull a model (first time only)
 ollama pull llama3.2
 
-# 4. Start the LocalClip server
+# 5. Start the LocalClip server
 uv run python -m server.server
 
-# 5. Open vault/ in Obsidian as a vault folder
+# 6. Open vault/ in Obsidian as a vault folder
 ```
 
 ---

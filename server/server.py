@@ -14,6 +14,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 import sys
 import time
 from datetime import datetime, timezone
@@ -33,16 +34,67 @@ from server import store, linker, render as renderer
 # ---------------------------------------------------------------------------
 
 _REPO_ROOT = Path(__file__).resolve().parent.parent
-_CONFIG_PATH = _REPO_ROOT / "config.json"
+_CONFIG_PATH         = _REPO_ROOT / "config.json"
+_CONFIG_EXAMPLE_PATH = _REPO_ROOT / "config.example.json"
 _config_cache: dict[str, Any] | None = None
+
+_DEFAULT_TOKEN = "CHANGE_ME"
 
 
 def load_config() -> dict[str, Any]:
-    """Read config.json and cache the result for the lifetime of the process."""
+    """Load configuration with a three-level priority:
+
+    1. config.json (user's personal file, gitignored)
+    2. config.example.json (fallback — useful for CI / first clone)
+    3. LOCALCLIP_TOKEN env var overrides the token from either file.
+
+    The result is cached for the lifetime of the process.
+    """
     global _config_cache
     if _config_cache is None:
-        _config_cache = json.loads(_CONFIG_PATH.read_text(encoding="utf-8"))
+        if _CONFIG_PATH.exists():
+            cfg = json.loads(_CONFIG_PATH.read_text(encoding="utf-8"))
+        elif _CONFIG_EXAMPLE_PATH.exists():
+            cfg = json.loads(_CONFIG_EXAMPLE_PATH.read_text(encoding="utf-8"))
+        else:
+            raise FileNotFoundError(
+                "Neither config.json nor config.example.json found. "
+                "Copy config.example.json to config.json and set your token."
+            )
+
+        # Env var overrides the file token (useful for CI / containers)
+        env_token = os.environ.get("LOCALCLIP_TOKEN")
+        if env_token:
+            cfg["token"] = env_token
+
+        _config_cache = cfg
     return _config_cache
+
+
+def check_token(config: dict[str, Any], insecure_dev: bool = False) -> None:
+    """Refuse to start if the token is still the default placeholder.
+
+    Pass insecure_dev=True (via --insecure-dev flag) to skip the check,
+    e.g. for automated tests that don't need real security.
+    """
+    if config.get("token", _DEFAULT_TOKEN) == _DEFAULT_TOKEN and not insecure_dev:
+        print(
+            "\n"
+            "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n"
+            "  ERROR: Token is still set to the default 'CHANGE_ME'.\n"
+            "\n"
+            "  To fix this:\n"
+            "    1. cp config.example.json config.json\n"
+            "    2. openssl rand -hex 16   (generates a token)\n"
+            "    3. Paste the token into config.json  (\"token\" field)\n"
+            "    4. Paste the same token into the userscript TOKEN constant\n"
+            "\n"
+            "  To start anyway for local development (no real security):\n"
+            "    uv run python -m server.server --insecure-dev\n"
+            "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n",
+            file=sys.stderr,
+        )
+        sys.exit(1)
 
 
 # ---------------------------------------------------------------------------
@@ -331,9 +383,16 @@ def main() -> None:
         action="store_true",
         help="Retry all queued entries (requires Ollama running)",
     )
+    parser.add_argument(
+        "--insecure-dev",
+        action="store_true",
+        help="Allow starting with the default CHANGE_ME token (development only)",
+    )
     args = parser.parse_args()
 
     config = load_config()
+    check_token(config, insecure_dev=args.insecure_dev)
+
     if args.reprocess_queued:
         reprocess_queued(config)
     else:
