@@ -1,12 +1,14 @@
 // ==UserScript==
 // @name         LocalClip
-// @version      0.4.0
+// @version      0.5.0
 // @description  Capture ChatGPT conversations into a local Obsidian vault via a local server.
 // @author       localclip
 // @match        https://chatgpt.com/*
 // @match        https://chat.openai.com/*
 // @grant        GM_xmlhttpRequest
 // @grant        GM_registerMenuCommand
+// @grant        GM_getValue
+// @grant        GM_setValue
 // @connect      127.0.0.1
 // @connect      localhost
 // @require      https://cdn.jsdelivr.net/npm/turndown@7.2.4/lib/turndown.browser.umd.js
@@ -170,6 +172,13 @@ let _lastToast    = "";      // suppress identical consecutive toasts
 let _pollTimer    = null;
 
 const _BACKOFF_MS = 15_000;  // retry delay after error or timeout
+
+// Current account label — persisted across page loads via GM_getValue.
+// Defaults to "default" if never set.
+/* global GM_getValue, GM_setValue */
+let _account = (typeof GM_getValue !== "undefined")
+  ? (GM_getValue("localclip_account", "default") || "default")
+  : "default";
 
 /* ─────────────────────────────────────────────────────────────────────────────
  * PURE HELPERS  (exported via _LC for Node test access)
@@ -516,6 +525,7 @@ async function clip(flush = false) {
     conversation_id: convId,
     messages:        turns,
     flush:           flush,
+    account:         _account,
     captured_at:     new Date().toISOString(),
   };
 
@@ -594,11 +604,11 @@ function init() {
   if (!getAdapter()) return;
 
   // ── Load-time debug log ──────────────────────────────────────────────────
-  const _version      = "0.4.0";
+  const _version      = "0.5.0";
   const _hostname     = location.hostname;
   const _convId       = getConversationId(location.pathname) || "none";
   const _tokenWarning = (TOKEN === "CHANGE_ME") ? " ⚠ TOKEN is still placeholder!" : "";
-  dbg(`v${_version} | host: ${_hostname} | conv: ${_convId}${_tokenWarning}`);
+  dbg(`v${_version} | host: ${_hostname} | conv: ${_convId} | account: ${_account}${_tokenWarning}`);
   // ────────────────────────────────────────────────────────────────────────
 
   // Hotkeys (off by default — Alt+P opens browser profile on some systems).
@@ -613,6 +623,20 @@ function init() {
   GM_registerMenuCommand("Pause/resume auto-capture", () => {
     _paused = !_paused;
     showToast(_paused ? "auto-capture paused" : "auto-capture resumed");
+  });
+  GM_registerMenuCommand("Set account label", () => {
+    const label = prompt(
+      `LocalClip: enter an account label for this session.\n` +
+      `Current: "${_account}"\n` +
+      `(use a short name like "work", "personal", or "research")`,
+      _account,
+    );
+    if (label !== null) {
+      _account = label.trim() || "default";
+      if (typeof GM_setValue !== "undefined") GM_setValue("localclip_account", _account);
+      showToast(`account set to "${_account}"`);
+      dbg(`account changed to "${_account}"`);
+    }
   });
 
   _pollTimer = setInterval(poll, POLL_MS);

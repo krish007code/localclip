@@ -37,6 +37,11 @@ globalThis.GM_xmlhttpRequest = () => {};
 // GM_registerMenuCommand is injected by Tampermonkey; stub it.
 globalThis.GM_registerMenuCommand = () => {};
 
+// GM_getValue / GM_setValue are injected by Tampermonkey; stub with in-memory store.
+const _gmStore = {};
+globalThis.GM_getValue = (key, def) => (key in _gmStore ? _gmStore[key] : def);
+globalThis.GM_setValue = (key, val) => { _gmStore[key] = val; };
+
 // Minimal location stub (init() calls getAdapter() → location.hostname).
 globalThis.location = { hostname: "chatgpt.com", pathname: "/" };
 

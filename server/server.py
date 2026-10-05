@@ -112,7 +112,10 @@ def _bootstrap_processed_ids() -> None:
     global _processed_ids
     nodes = store.load_nodes()
     with _ID_LOCK:
-        _processed_ids = {n["id"] for n in nodes if "id" in n}
+        _processed_ids = {
+            f"{n.get('account', 'default')}:{n['id']}"
+            for n in nodes if "id" in n
+        }
 
 
 # ---------------------------------------------------------------------------
@@ -152,9 +155,10 @@ def _worker() -> None:
             _set_status({"status": "error", "message": msg}, error=msg)
         finally:
             # Release inflight regardless of outcome
+            _acct = payload_meta.get("account", "default") or "default"
             with _ID_LOCK:
                 for user_turn, _ in new_pairs:
-                    _inflight.discard(user_turn["id"])
+                    _inflight.discard(f"{_acct}:{user_turn['id']}")
             _work_queue.task_done()
 
 
@@ -194,6 +198,7 @@ def _process_turns(
     """
     t0 = time.monotonic()
     conv_id = payload_meta["conversation_id"]
+    account = payload_meta.get("account", "default") or "default"
 
     all_nodes = store.load_nodes()
     existing_topics = sorted({n.get("topic", "") for n in all_nodes if n.get("topic")})
@@ -221,11 +226,12 @@ def _process_turns(
 
     for user_turn, asst_turn in new_pairs:
         turn_id = user_turn["id"]
+        acct_id = f"{account}:{turn_id}"
 
         # Layer-2 idempotency: skip if already persisted
         with _ID_LOCK:
-            if turn_id in _processed_ids:
-                print(f"[idempotent skip] id={turn_id[:16]}…")
+            if acct_id in _processed_ids:
+                print(f"[idempotent skip] id={turn_id[:16]}… acct={account}")
                 last_id_processed = turn_id
                 prev_id = turn_id
                 continue
@@ -261,7 +267,7 @@ def _process_turns(
                 prev_id = turn_id
                 # Mark as processed so retries don't re-enter the LLM
                 with _ID_LOCK:
-                    _processed_ids.add(turn_id)
+                    _processed_ids.add(acct_id)
                 continue
             else:
                 print(f"[skip overridden] {q_preview!r}")
@@ -279,6 +285,7 @@ def _process_turns(
         node: dict[str, Any] = {
             "id":       turn_id,
             "conv_id":  conv_id,
+            "account":  account,
             "idx":      next_idx,
             "prev":     prev_id,
             "question": question,
@@ -293,7 +300,7 @@ def _process_turns(
 
         # Mark as processed — layer-2 fence
         with _ID_LOCK:
-            _processed_ids.add(turn_id)
+            _processed_ids.add(acct_id)
 
         existing_topics = sorted(set(existing_topics) | {node["topic"]})
         recent_bullets  = (node.get("bullets", []) + recent_bullets)[:8]
@@ -344,18 +351,20 @@ def handle_clip(payload: dict[str, Any], config: dict[str, Any]) -> dict[str, An
         return {"status": "duplicate"}
 
     # In-flight and idempotency filter
+    account    = payload.get("account", "default") or "default"
     to_enqueue: list[tuple[dict, dict]] = []
     busy_ids:   list[str]               = []
 
     with _ID_LOCK:
         for user_turn, asst_turn in new_pairs:
-            tid = user_turn["id"]
-            if tid in _processed_ids:
+            tid     = user_turn["id"]
+            acct_id = f"{account}:{tid}"
+            if acct_id in _processed_ids:
                 continue          # already done — treat as duplicate silently
-            if tid in _inflight:
-                busy_ids.append(tid)
+            if acct_id in _inflight:
+                busy_ids.append(acct_id)
                 continue
-            _inflight.add(tid)
+            _inflight.add(acct_id)
             to_enqueue.append((user_turn, asst_turn))
 
     if busy_ids and not to_enqueue:
@@ -368,6 +377,7 @@ def handle_clip(payload: dict[str, Any], config: dict[str, Any]) -> dict[str, An
         "url":             payload.get("url", ""),
         "title":           payload.get("title", ""),
         "conversation_id": conv_id,
+        "account":         payload.get("account", "default") or "default",
         "captured_at":     payload.get("captured_at", ""),
     }
 

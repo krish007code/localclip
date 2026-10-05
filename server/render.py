@@ -135,12 +135,15 @@ def render_node_file(
     bullet_lines = "\n".join(f"- {b}" for b in bullets) if bullets else "- (no bullets)"
 
     # --- Assemble ---
+    account  = node.get("account") or "default"
     lines = [
         "---",
         f"id: {node_id}",
         f"conv_id: {conv_id}",
         f"idx: {idx}",
         f"topic: {topic}",
+        f"account: {account}",
+        f"tags: [\"acct/{account}\"]",
         f"ts: {ts}",
         "---",
         "",
@@ -174,9 +177,10 @@ def render_topic_file(
         fname = node_filename(n)
         if fname not in all_filenames:
             continue
-        ts = n.get("ts", "")
-        date = ts[:10] if ts else "?"
-        node_lines.append(f"- [[{fname}]] — {date}")
+        ts      = n.get("ts", "")
+        date    = ts[:10] if ts else "?"
+        account = n.get("account") or "default"
+        node_lines.append(f"- [[{fname}]] — {date} `{account}`")
 
     body = "\n".join(node_lines) if node_lines else "- (no nodes yet)"
 

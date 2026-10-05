@@ -169,9 +169,9 @@ class TestInFlightBusy:
         _reset(tmp_path, monkeypatch)
         cfg = srv._config_cache
 
-        # Pre-populate _inflight with u1 to simulate an in-flight request
+        # Pre-populate _inflight with the account-qualified key
         with srv._ID_LOCK:
-            srv._inflight.add("u1")
+            srv._inflight.add("default:u1")
 
         llm_called = {"n": 0}
         def spy_llm(*_a, **_kw):
@@ -186,13 +186,14 @@ class TestInFlightBusy:
         assert llm_called["n"] == 0, "LLM must not be called when id is in-flight"
 
     def test_inflight_cleared_after_worker_completes(self, tmp_path, monkeypatch):
-        """After _process_turns finishes, the id must no longer be in _inflight."""
+        """After _process_turns finishes, the id must be in _processed_ids."""
         _reset(tmp_path, monkeypatch)
         cfg = srv._config_cache
         tid = "u1"
         payload_meta = {
             "url": "u", "title": "t",
             "conversation_id": "conv-1",
+            "account": "default",
             "captured_at": "2025-10-05T10:00:00Z",
         }
         pairs = [
@@ -200,20 +201,17 @@ class TestInFlightBusy:
              {"id": "a1", "role": "assistant", "markdown": "A"}),
         ]
 
-        # Manually add to inflight (as the worker would)
+        # Manually add to inflight using the account-qualified key
         with srv._ID_LOCK:
-            srv._inflight.add(tid)
+            srv._inflight.add("default:u1")
 
         with patch.object(llm_mod, "call_ollama", side_effect=_good_llm):
             with patch.object(render_mod, "rebuild"):
                 srv._process_turns(pairs, payload_meta, cfg)
 
-        # After processing, worker's finally block removes from inflight.
-        # Simulate it (in unit tests we call _process_turns directly, so
-        # we verify the id IS in _processed_ids and thus future requests
-        # won't call the LLM regardless).
+        # _process_turns adds account:id to _processed_ids
         with srv._ID_LOCK:
-            assert tid in srv._processed_ids
+            assert "default:u1" in srv._processed_ids
 
     def test_busy_does_not_advance_processed_ids(self, tmp_path, monkeypatch):
         """A busy response must not add the id to _processed_ids."""
