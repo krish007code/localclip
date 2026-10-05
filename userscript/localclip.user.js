@@ -662,7 +662,7 @@ function init() {
       transition:   "opacity 0.3s",
       opacity:      "1",
     });
-    el.textContent = "LocalClip active";
+    el.textContent = `LocalClip active · ${_account}`;
     document.body.appendChild(el);
     setTimeout(() => {
       el.style.opacity = "0";

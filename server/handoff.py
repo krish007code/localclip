@@ -152,9 +152,25 @@ def main() -> None:
     )
     parser.add_argument("--topic",   required=True,  help="Topic name (exact match)")
     parser.add_argument("--account", default=None,   help="Restrict to one account label")
+    parser.add_argument(
+        "--nodes", default=None,
+        help="Path to an alternative nodes.jsonl (e.g. demo/nodes.jsonl)",
+    )
     args = parser.parse_args()
 
-    nodes = _load_nodes()
+    # Load nodes — from custom path or default data/nodes.jsonl
+    if args.nodes:
+        import json as _json  # noqa: PLC0415
+        nodes_path = Path(args.nodes)
+        if not nodes_path.exists():
+            print(f"nodes file not found: {nodes_path}", file=sys.stderr)
+            sys.exit(1)
+        nodes = [
+            _json.loads(l) for l in nodes_path.read_text(encoding="utf-8").splitlines()
+            if l.strip()
+        ]
+    else:
+        nodes = _load_nodes()
     topics = list_topics(nodes)
 
     if args.topic not in topics:

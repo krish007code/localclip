@@ -1,5 +1,6 @@
 data/
 vault/
+demo/
 .venv/
 __pycache__/
 config.json
