@@ -19,10 +19,13 @@
  *           openssl rand -hex 16
  *
  * PORT:  Must match the "port" field in config.json.  Default is 8787.
+ *
+ * DEBUG: Set to false to silence console output once everything is working.
  * ───────────────────────────────────────────────────────────────────────────── */
 
-const TOKEN = "CHANGE_ME";   // ← paste your token here
+const TOKEN = "aa269aac08c3bd71cd3fe289ef3c4808";   // ← paste your token here
 const PORT  = 8787;
+const DEBUG = true;   // ← set to false to silence [LocalClip] console logs
 
 /* ─────────────────────────────────────────────────────────────────────────────
  * INTERNAL CONSTANTS (do not change unless the server moves)
@@ -30,6 +33,19 @@ const PORT  = 8787;
 
 const SERVER_URL = `http://127.0.0.1:${PORT}`;
 const POLL_MS    = 5000;   // polling interval in milliseconds
+
+/* ─────────────────────────────────────────────────────────────────────────────
+ * DEBUG LOGGER
+ * ───────────────────────────────────────────────────────────────────────────── */
+
+/**
+ * Log to the console only when DEBUG is true.
+ * Always prefixes with "[LocalClip]".
+ * Never called with token values or full chat text.
+ */
+function dbg(...args) {
+  if (DEBUG) console.log("[LocalClip]", ...args);
+}
 
 /* ─────────────────────────────────────────────────────────────────────────────
  * SITE ADAPTERS
@@ -369,6 +385,8 @@ function postClip(payload) {
           body = { status: "error", message: "invalid JSON from server" };
         }
 
+        dbg(`response HTTP ${resp.status}`, body);
+
         if (resp.status === 401) {
           reject({ status: "error", message: "wrong token (401)" });
           return;
@@ -385,10 +403,12 @@ function postClip(payload) {
       },
 
       onerror() {
+        dbg("request error — server unreachable");
         reject({ status: "error", message: "server unreachable — is it running?" });
       },
 
       ontimeout() {
+        dbg("request timed out");
         reject({ status: "error", message: "request timed out" });
       },
 
@@ -428,8 +448,14 @@ async function clip(flush = false) {
 
   const convId = getConversationId(location.pathname);
   if (!convId) {
+    dbg("poll decision: no conversation id");
     // New chat: URL has no conversation ID yet.
     if (flush) showToast("no conversation ID yet — save after ChatGPT responds");
+    return;
+  }
+
+  if (_paused) {
+    dbg("poll decision: paused");
     return;
   }
 
@@ -444,9 +470,19 @@ async function clip(flush = false) {
   const { userCount } = summarizeTurns(turns);
   const ackedCount = _ackedCount[convId] || 0;
 
+  dbg(
+    `poll — turns found: ${turns.length}, user turns: ${userCount},` +
+    ` acked: ${ackedCount}, flush: ${flush}`
+  );
+
   // For the polling path: only POST when we have new user turns.
   // For flush (Alt+S): always POST regardless of count.
-  if (!flush && userCount <= ackedCount) return;
+  if (!flush && userCount <= ackedCount) {
+    dbg("poll decision: skip (no new user turns)");
+    return;
+  }
+
+  dbg("poll decision: send");
 
   const payload = {
     url:             location.href,
@@ -483,7 +519,6 @@ async function clip(flush = false) {
  * ───────────────────────────────────────────────────────────────────────────── */
 
 async function poll() {
-  if (_paused) return;
   try {
     await clip(false);
   } catch (_) {
@@ -521,10 +556,45 @@ function init() {
   // Only proceed if this is a supported, enabled site.
   if (!getAdapter()) return;
 
+  // ── Load-time debug log ──────────────────────────────────────────────────
+  const _version      = "0.2.0";
+  const _hostname     = location.hostname;
+  const _convId       = getConversationId(location.pathname) || "none";
+  const _tokenWarning = (TOKEN === "CHANGE_ME") ? " ⚠ TOKEN is still placeholder!" : "";
+  dbg(`v${_version} | host: ${_hostname} | conv: ${_convId}${_tokenWarning}`);
+  // ────────────────────────────────────────────────────────────────────────
+
   document.addEventListener("keydown", onKeyDown, true);
   _pollTimer = setInterval(poll, POLL_MS);
 
-  console.log("[LocalClip] running — Alt+S to clip, Alt+P to pause");
+  // Show a brief "active" toast so the user can confirm the script loaded
+  // without opening the console.  Uses a separate path so it bypasses the
+  // duplicate-suppression logic in showToast() and dismisses after 2 s.
+  (() => {
+    const el = document.createElement("div");
+    Object.assign(el.style, {
+      position:     "fixed",
+      bottom:       "20px",
+      right:        "20px",
+      zIndex:       "999999",
+      background:   "#1a1a2e",
+      color:        "#e0e0e0",
+      padding:      "8px 14px",
+      borderRadius: "6px",
+      fontSize:     "13px",
+      fontFamily:   "monospace",
+      boxShadow:    "0 2px 8px rgba(0,0,0,0.4)",
+      pointerEvents:"none",
+      transition:   "opacity 0.3s",
+      opacity:      "1",
+    });
+    el.textContent = "LocalClip active";
+    document.body.appendChild(el);
+    setTimeout(() => {
+      el.style.opacity = "0";
+      setTimeout(() => el.remove(), 400);
+    }, 2000);
+  })();
 }
 
 init();
