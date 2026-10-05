@@ -1,0 +1,20 @@
+{
+  "url": "https://chatgpt.com/c/aaaabbbb-0000-0000-0000-000000000001",
+  "title": "Learning Python Generators",
+  "source": "chat",
+  "conversation_id": "aaaabbbb-0000-0000-0000-000000000001",
+  "flush": false,
+  "captured_at": "2025-10-05T10:05:00Z",
+  "messages": [
+    {"id": "u1", "role": "user",      "markdown": "What is a Python generator and when should I use one?"},
+    {"id": "a1", "role": "assistant", "markdown": "A generator is a function that uses `yield` to produce values lazily."},
+    {"id": "u2", "role": "user",      "markdown": "What is the difference between a generator and a list comprehension?"},
+    {"id": "a2", "role": "assistant", "markdown": "A list comprehension evaluates eagerly; a generator evaluates lazily."},
+    {"id": "u3", "role": "user",      "markdown": "Can generators be used with async functions?"},
+    {"id": "a3", "role": "assistant", "markdown": "Yes. Python has async generators using `async def` with `yield`."},
+    {"id": "u4", "role": "user",      "markdown": "How do I send values into a generator using .send()?"},
+    {"id": "a4", "role": "assistant", "markdown": "Use `.send(value)` to resume a generator and pass a value in. The `yield` expression evaluates to that value inside the generator.\n\n```python\ndef accumulator():\n    total = 0\n    while True:\n        value = yield total\n        total += value\n```"},
+    {"id": "u5", "role": "user",      "markdown": "What about generator pipelines?"},
+    {"id": "a5", "role": "assistant", "markdown": "You can chain generators so the output of one feeds the input of the next, forming a pipeline with no intermediate lists."}
+  ]
+}

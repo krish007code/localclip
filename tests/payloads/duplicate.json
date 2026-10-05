@@ -1,0 +1,16 @@
+{
+  "url": "https://chatgpt.com/c/aaaabbbb-0000-0000-0000-000000000001",
+  "title": "Learning Python Generators",
+  "source": "chat",
+  "conversation_id": "aaaabbbb-0000-0000-0000-000000000001",
+  "flush": false,
+  "captured_at": "2025-10-05T10:00:30Z",
+  "messages": [
+    {"id": "u1", "role": "user",      "markdown": "What is a Python generator and when should I use one?"},
+    {"id": "a1", "role": "assistant", "markdown": "A generator is a function that uses `yield` to produce values lazily."},
+    {"id": "u2", "role": "user",      "markdown": "What is the difference between a generator and a list comprehension?"},
+    {"id": "a2", "role": "assistant", "markdown": "A list comprehension evaluates eagerly; a generator evaluates lazily."},
+    {"id": "u3", "role": "user",      "markdown": "Can generators be used with async functions?"},
+    {"id": "a3", "role": "assistant", "markdown": "Yes. Python has async generators."}
+  ]
+}

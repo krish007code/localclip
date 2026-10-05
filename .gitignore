@@ -1,0 +1,4 @@
+data/
+vault/
+.venv/
+__pycache__/
