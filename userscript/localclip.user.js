@@ -9,7 +9,7 @@
 // @grant        GM_registerMenuCommand
 // @connect      127.0.0.1
 // @connect      localhost
-// @require      https://cdn.jsdelivr.net/npm/turndown@7.2.4/dist/turndown.browser.umd.js
+// @require      https://cdn.jsdelivr.net/npm/turndown@7.2.4/lib/turndown.browser.umd.js
 // ==/UserScript==
 
 /* ─────────────────────────────────────────────────────────────────────────────
@@ -512,11 +512,12 @@ async function clip(flush = false) {
   _ackedCount[convId] = userCount;
 
   const s = result.status;
-  if (s === "saved")      showToast(`saved ${result.count} turn(s)`);
-  else if (s === "duplicate") showToast("nothing new");
-  else if (s === "skipped")   showToast("nothing new");
-  else if (s === "queued")    showToast("queued (Ollama offline)");
-  else if (s === "llm_failed") showToast("saved (LLM error — raw only)");
+  if (s === "saved")       showToast(`saved ${result.count} turn(s)`);
+  else if (s === "duplicate")  showToast("nothing new");
+  else if (s === "skipped")    showToast("nothing new");
+  else if (s === "queued")     showToast("queued (Ollama offline)");
+  else if (s === "llm_failed") showToast(`saved (LLM error — raw only)`);
+  else if (s === "error")      showToast(result.message || "server error");
   else                         showToast(s || "ok");
 }
 

@@ -104,7 +104,7 @@ Messages: `saved N turns`, `skipped`, `duplicate`, `error: <message>`.
 #### FR-US-14 — CDN dependencies (pinned)
 ```
 // @require https://cdn.jsdelivr.net/npm/@mozilla/readability@0.6.0/Readability.js
-// @require https://cdn.jsdelivr.net/npm/turndown@7.2.4/dist/turndown.browser.umd.js
+// @require https://cdn.jsdelivr.net/npm/turndown@7.2.4/lib/turndown.browser.umd.js
 ```
 (Readability is kept for future article-clipping support; not used in v1 chat flow.)
 

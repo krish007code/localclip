@@ -1,8 +1,7 @@
 """
 server.py — HTTP server and pipeline orchestration for LocalClip.
 
-Binds to 127.0.0.1 only.  Checkpoint-1 uses a deterministic stub LLM;
-the real Ollama call is wired in Checkpoint 3.
+Binds to 127.0.0.1 only.  Real Ollama call wired in Checkpoint 3.
 
 Endpoints:
   GET  /health  → {"status": "ok"}
@@ -28,6 +27,8 @@ from typing import Any
 # ---------------------------------------------------------------------------
 
 from server import store, linker, render as renderer
+from server import llm as llm_module
+from server.llm import OllamaUnavailableError, OllamaModelError
 
 # ---------------------------------------------------------------------------
 # Config
@@ -102,43 +103,6 @@ def check_token(config: dict[str, Any], insecure_dev: bool = False) -> None:
 # Replaced in Checkpoint 3 by llm.call_ollama.
 # ---------------------------------------------------------------------------
 
-_STUB_COUNTER: dict[str, int] = {}  # deterministic per-topic counter
-
-
-def stub_llm(
-    question: str,
-    answer: str,
-    existing_topics: list[str],
-    _recent_bullets: list[str],
-    _config: dict[str, Any],
-) -> dict[str, Any]:
-    """Deterministic fake LLM output for testing.
-
-    Topic cycles through three values so consecutive turns get different topics,
-    exercising both the topic-hub and the _Index renderers.
-    """
-    topics = ["Python Basics", "Machine Learning", "Data Structures"]
-    # Use a simple hash of the question to pick a deterministic topic
-    idx = hash(question) % len(topics)
-    # But if an existing topic matches, prefer it
-    raw_topic = topics[idx]
-    if existing_topics:
-        raw_topic = existing_topics[hash(question) % len(existing_topics)]
-
-    # Short deterministic title
-    words = question.strip().split()
-    title = " ".join(words[:6]) or "Untitled"
-
-    return {
-        "skip": False,
-        "title": title,
-        "topic": raw_topic,
-        "bullets": [
-            f"Key point from: {question[:60]}",
-            "Stub bullet — replace with real LLM in Checkpoint 3.",
-        ],
-    }
-
 
 # ---------------------------------------------------------------------------
 # Turn logic
@@ -208,14 +172,24 @@ def handle_clip(payload: dict[str, Any], config: dict[str, Any]) -> dict[str, An
         # Save raw archive
         raw_file = store.save_raw(payload, user_turn, asst_turn)
 
-        # LLM call (stub in Checkpoint 1)
-        llm_raw = stub_llm(
-            question=user_turn.get("markdown", ""),
-            answer=asst_turn.get("markdown", ""),
-            existing_topics=existing_topics,
-            _recent_bullets=recent_bullets,
-            _config=config,
-        )
+        # LLM call — real Ollama (Checkpoint 3)
+        question = user_turn.get("markdown", "")
+        answer   = asst_turn.get("markdown", "")
+        try:
+            llm_raw = llm_module.call_ollama(
+                question=question,
+                answer=answer,
+                existing_topics=existing_topics,
+                recent_bullets=recent_bullets,
+                config=config,
+            )
+        except OllamaUnavailableError:
+            return {"status": "error", "message": "Ollama not running"}
+        except OllamaModelError:
+            return {"status": "error", "message": f"model not found: {config.get('model', '?')}"}
+
+        # Propagate llm_failed status but still write the node (chain must not break)
+        llm_error = llm_raw.pop("_llm_error", None)
 
         # Skip handling
         if llm_raw.get("skip"):
@@ -264,9 +238,11 @@ def handle_clip(payload: dict[str, Any], config: dict[str, Any]) -> dict[str, An
 
     duration_ms = int((time.monotonic() - t0) * 1000)
     last_topic = node.get("topic", "?") if saved else "?"  # type: ignore[possibly-undefined]
-    print(f"[saved] {last_topic} | {saved} turn(s) | {duration_ms}ms")
+    had_llm_error = llm_error is not None  # type: ignore[possibly-undefined]
+    status_str = "llm_failed" if had_llm_error else "saved"
+    print(f"[{status_str}] {last_topic} | {saved} turn(s) | {duration_ms}ms")
 
-    return {"status": "saved", "count": saved}
+    return {"status": status_str, "count": saved}
 
 
 # ---------------------------------------------------------------------------

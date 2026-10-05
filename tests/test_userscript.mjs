@@ -19,6 +19,7 @@ import assert from "node:assert/strict";
 import { createRequire } from "node:module";
 import { fileURLToPath } from "node:url";
 import path from "node:path";
+import fs from "node:fs";
 
 // ── Stubs required before the userscript is loaded ────────────────────────
 
@@ -345,6 +346,33 @@ tests.push(test("flush bypasses the ackedCount gate", () => {
   ]);
   const shouldPost = flush || userCount > ackedCount;
   assert.equal(shouldPost, true);
+}));
+
+// ── @require URL guard ────────────────────────────────────────────────────
+
+console.log("\n@require URL guard");
+
+tests.push(test("@require URLs must not contain /dist/ (correct path is /lib/)", () => {
+  const raw = fs.readFileSync(scriptPath, "utf-8");
+  const requireLines = raw
+    .split("\n")
+    .filter((l) => l.trim().startsWith("// @require"));
+  assert.ok(requireLines.length > 0, "No @require lines found in userscript");
+  for (const line of requireLines) {
+    assert.ok(
+      !line.includes("/dist/"),
+      `@require line uses /dist/ — should be /lib/:\n  ${line.trim()}`
+    );
+  }
+}));
+
+tests.push(test("turndown @require points to /lib/turndown.browser.umd.js", () => {
+  const raw = fs.readFileSync(scriptPath, "utf-8");
+  const expected = "https://cdn.jsdelivr.net/npm/turndown@7.2.4/lib/turndown.browser.umd.js";
+  assert.ok(
+    raw.includes(expected),
+    `Expected @require URL not found:\n  ${expected}`
+  );
 }));
 
 // ── Wait for all async tests, then report ─────────────────────────────────
