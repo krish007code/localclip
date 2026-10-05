@@ -4,9 +4,49 @@ Capture ChatGPT conversations turn by turn into a local Obsidian vault — with
 `[[wiki links]]`, Prev/Next navigation, and topic hubs. Processed by a local
 LLM (Ollama). Nothing leaves your machine.
 
----
+## Quick start
 
-## Installing the userscript in Tampermonkey
+```bash
+# 1. Clone and enter the repo
+git clone <repo-url> localclip
+cd localclip
+
+# 2. Create your personal config
+cp config.example.json config.json
+
+# 3. Generate a token — paste it in BOTH places shown below
+openssl rand -hex 16
+
+#   → open config.json and set:  "token": "<your-token>"
+#   → open userscript/localclip.user.js and set:  const TOKEN = "<your-token>";
+
+# 4. Install Ollama and pull a model (first time only)
+#   https://ollama.com/download
+ollama pull llama3.2
+
+# 5. Start the LocalClip server
+uv run python -m server.server
+
+# 6. Install the userscript in Tampermonkey
+#   a. Open Tampermonkey → Dashboard → click the + tab
+#   b. Delete the placeholder code
+#   c. Paste the entire contents of userscript/localclip.user.js
+#   d. File → Save  (Ctrl+S)
+#   e. Navigate to chatgpt.com — allow the 127.0.0.1 permission prompt
+
+# 7. Capture a turn
+#   Start a conversation, wait for ChatGPT to finish its reply,
+#   then click the Tampermonkey icon → "Save now (flush)".
+#   A toast "saved 1 turn(s)" confirms it worked.
+
+# 8. Open the vault in Obsidian
+#   File → Open Vault → point it at the  vault/  folder in this repo
+```
+
+> **Important**: always press **"Save now"** only after ChatGPT has finished
+> its reply. Saving mid-stream captures an incomplete answer.
+
+---
 
 ### Prerequisites
 - [Tampermonkey](https://www.tampermonkey.net/) installed in Chrome, Edge, or Firefox.
