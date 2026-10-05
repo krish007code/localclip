@@ -271,6 +271,19 @@ def rebuild(
 
     vault_path.mkdir(parents=True, exist_ok=True)
 
+    # Deduplicate by id: if nodes.jsonl somehow contains the same id more than
+    # once (e.g. from a crash mid-write), keep only the first occurrence.
+    seen_ids: set[str] = set()
+    deduped: list[dict[str, Any]] = []
+    for n in nodes:
+        nid = n.get("id")
+        if nid and nid not in seen_ids:
+            seen_ids.add(nid)
+            deduped.append(n)
+        elif nid:
+            print(f"[render] duplicate id {nid[:16]}… — keeping first, skipping later")
+    nodes = deduped
+
     # Clear existing .md files (preserves .gitkeep and subdirectories)
     for f in vault_path.glob("*.md"):
         f.unlink()

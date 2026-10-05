@@ -1,6 +1,6 @@
 // ==UserScript==
 // @name         LocalClip
-// @version      0.3.0
+// @version      0.4.0
 // @description  Capture ChatGPT conversations into a local Obsidian vault via a local server.
 // @author       localclip
 // @match        https://chatgpt.com/*
@@ -164,8 +164,12 @@ _td.addRule("fencedCodeBlock", {
 const _ackedCount = {};   // { [conv_id]: number }
 
 let _paused       = false;
-let _lastToast    = "";   // suppress identical consecutive toasts
+let _inFlight     = false;   // true while a POST /clip request is outstanding
+let _backoffUntil = 0;       // epoch ms — don't send until after this time
+let _lastToast    = "";      // suppress identical consecutive toasts
 let _pollTimer    = null;
+
+const _BACKOFF_MS = 15_000;  // retry delay after error or timeout
 
 /* ─────────────────────────────────────────────────────────────────────────────
  * PURE HELPERS  (exported via _LC for Node test access)
@@ -418,7 +422,7 @@ function postClip(payload) {
         reject({ status: "error", message: "request timed out" });
       },
 
-      timeout: 15000,
+      timeout: 30000,   // 30 s — only needs to wait for "accepted", not for the LLM
     });
   });
 }
@@ -446,6 +450,12 @@ function getAdapter() {
 /**
  * Extract turns, check whether they are new, and POST to the server.
  *
+ * Guards:
+ *  - _inFlight: never sends while a previous request is outstanding
+ *  - _backoffUntil: 15 s cooldown after network errors / timeouts
+ *  - acked on: "accepted", "busy", "duplicate", "skipped"  (count advances)
+ *  - not acked on: errors / timeouts (backoff, retry next poll)
+ *
  * @param {boolean} [flush=false]  true = process last (pending) turn too
  */
 async function clip(flush = false) {
@@ -455,13 +465,24 @@ async function clip(flush = false) {
   const convId = getConversationId(location.pathname);
   if (!convId) {
     dbg("poll decision: no conversation id");
-    // New chat: URL has no conversation ID yet.
     if (flush) showToast("no conversation ID yet — save after ChatGPT responds");
     return;
   }
 
   if (_paused) {
     dbg("poll decision: paused");
+    return;
+  }
+
+  // In-flight guard: never overlap requests.
+  if (_inFlight) {
+    dbg("poll decision: skip (request in flight)");
+    return;
+  }
+
+  // Backoff guard: wait after errors/timeouts.
+  if (Date.now() < _backoffUntil) {
+    dbg(`poll decision: skip (backoff for ${Math.ceil((_backoffUntil - Date.now()) / 1000)}s)`);
     return;
   }
 
@@ -481,8 +502,6 @@ async function clip(flush = false) {
     ` acked: ${ackedCount}, flush: ${flush}`
   );
 
-  // For the polling path: only POST when we have new user turns.
-  // For flush (Alt+S): always POST regardless of count.
   if (!flush && userCount <= ackedCount) {
     dbg("poll decision: skip (no new user turns)");
     return;
@@ -500,23 +519,34 @@ async function clip(flush = false) {
     captured_at:     new Date().toISOString(),
   };
 
+  _inFlight = true;
   let result;
   try {
     result = await postClip(payload);
   } catch (err) {
+    // Network error or timeout — do NOT advance acked count; apply backoff.
+    _backoffUntil = Date.now() + _BACKOFF_MS;
     showToast(err.message || "error");
+    dbg(`request failed — backoff ${_BACKOFF_MS / 1000}s`, err.message);
     return;
+  } finally {
+    _inFlight = false;
   }
 
-  // Update acknowledged count on any non-error response.
-  _ackedCount[convId] = userCount;
-
+  // "accepted", "busy", "duplicate", "skipped" all count as acknowledged:
+  // the server has the payload and will either process it or already has.
   const s = result.status;
-  if (s === "saved")       showToast(`saved ${result.count} turn(s)`);
-  else if (s === "duplicate")  showToast("nothing new");
-  else if (s === "skipped")    showToast("nothing new");
-  else if (s === "queued")     showToast("queued (Ollama offline)");
-  else if (s === "llm_failed") showToast(`saved (LLM error — raw only)`);
+  const isAcknowledged = (s === "accepted" || s === "busy" ||
+                          s === "duplicate" || s === "skipped");
+  if (isAcknowledged) {
+    _ackedCount[convId] = userCount;
+  }
+
+  if (s === "accepted")        showToast("queued");
+  else if (s === "saved")      showToast(`saved ${result.count} turn(s)`);
+  else if (s === "llm_failed") showToast("saved (LLM error — raw only)");
+  else if (s === "busy")       { /* silent — server already has it */ }
+  else if (s === "duplicate" || s === "skipped") { /* silent */ }
   else if (s === "error")      showToast(result.message || "server error");
   else                         showToast(s || "ok");
 }
@@ -564,7 +594,7 @@ function init() {
   if (!getAdapter()) return;
 
   // ── Load-time debug log ──────────────────────────────────────────────────
-  const _version      = "0.3.0";
+  const _version      = "0.4.0";
   const _hostname     = location.hostname;
   const _convId       = getConversationId(location.pathname) || "none";
   const _tokenWarning = (TOKEN === "CHANGE_ME") ? " ⚠ TOKEN is still placeholder!" : "";
@@ -630,5 +660,11 @@ if (typeof module !== "undefined" && module.exports) {
     sha256hex,
     deriveMessageId,
     summarizeTurns,
+    // expose for testing
+    _state: { get inFlight() { return _inFlight; },
+               get backoffUntil() { return _backoffUntil; },
+               get ackedCount() { return _ackedCount; },
+               resetBackoff() { _backoffUntil = 0; },
+               resetInFlight() { _inFlight = false; } },
   };
 }

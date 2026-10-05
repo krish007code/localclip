@@ -84,6 +84,10 @@ class TestValidResponse:
         assert len(result["bullets"]) == 6
 
     def test_skip_true_returned(self):
+        """llm.call_ollama returns skip=True as-is from the model.
+        The skip gate (honor vs override) is enforced in server.handle_clip,
+        not here.  See tests/test_skip_gate.py.
+        """
         llm._USE_SCHEMA = True
         payload = {"skip": True, "title": "T", "topic": "T", "bullets": []}
         resp = _make_response(payload)
