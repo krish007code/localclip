@@ -33,6 +33,9 @@ globalThis.TurndownService = class {
 // GM_xmlhttpRequest is injected by Tampermonkey; stub it so init() doesn't crash.
 globalThis.GM_xmlhttpRequest = () => {};
 
+// GM_registerMenuCommand is injected by Tampermonkey; stub it.
+globalThis.GM_registerMenuCommand = () => {};
+
 // Minimal location stub (init() calls getAdapter() → location.hostname).
 globalThis.location = { hostname: "chatgpt.com", pathname: "/" };
 

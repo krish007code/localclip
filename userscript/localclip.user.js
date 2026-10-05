@@ -1,11 +1,12 @@
 // ==UserScript==
 // @name         LocalClip
-// @version      0.2.0
+// @version      0.3.0
 // @description  Capture ChatGPT conversations into a local Obsidian vault via a local server.
 // @author       localclip
 // @match        https://chatgpt.com/*
 // @match        https://chat.openai.com/*
 // @grant        GM_xmlhttpRequest
+// @grant        GM_registerMenuCommand
 // @connect      127.0.0.1
 // @connect      localhost
 // @require      https://cdn.jsdelivr.net/npm/turndown@7.2.4/dist/turndown.browser.umd.js
@@ -14,18 +15,23 @@
 /* ─────────────────────────────────────────────────────────────────────────────
  * CONFIGURATION
  *
- * TOKEN: Generate a random string and paste the same value into config.json
- *        on the server side (the "token" field).  Example:
- *           openssl rand -hex 16
+ * TOKEN:          Generate a random string and paste the same value into
+ *                 config.json on the server side (the "token" field).
+ *                 Example:  openssl rand -hex 16
  *
- * PORT:  Must match the "port" field in config.json.  Default is 8787.
+ * PORT:           Must match the "port" field in config.json.  Default 8787.
  *
- * DEBUG: Set to false to silence console output once everything is working.
+ * DEBUG:          Set to false to silence console output once working.
+ *
+ * ENABLE_HOTKEYS: Alt+S / Alt+P keyboard shortcuts.  Defaulted to false
+ *                 because Alt+P opens the browser profile menu on some systems.
+ *                 Use the Tampermonkey menu commands instead (always available).
  * ───────────────────────────────────────────────────────────────────────────── */
 
-const TOKEN = "aa269aac08c3bd71cd3fe289ef3c4808";   // ← paste your token here
-const PORT  = 8787;
-const DEBUG = true;   // ← set to false to silence [LocalClip] console logs
+const TOKEN          = "aa269aac08c3bd71cd3fe289ef3c4808";   // ← paste your token here
+const PORT           = 8787;
+const DEBUG          = true;    // ← set false to silence [LocalClip] console logs
+const ENABLE_HOTKEYS = false;   // ← set true to enable Alt+S / Alt+P
 
 /* ─────────────────────────────────────────────────────────────────────────────
  * INTERNAL CONSTANTS (do not change unless the server moves)
@@ -557,14 +563,27 @@ function init() {
   if (!getAdapter()) return;
 
   // ── Load-time debug log ──────────────────────────────────────────────────
-  const _version      = "0.2.0";
+  const _version      = "0.3.0";
   const _hostname     = location.hostname;
   const _convId       = getConversationId(location.pathname) || "none";
   const _tokenWarning = (TOKEN === "CHANGE_ME") ? " ⚠ TOKEN is still placeholder!" : "";
   dbg(`v${_version} | host: ${_hostname} | conv: ${_convId}${_tokenWarning}`);
   // ────────────────────────────────────────────────────────────────────────
 
-  document.addEventListener("keydown", onKeyDown, true);
+  // Hotkeys (off by default — Alt+P opens browser profile on some systems).
+  // Enable by setting ENABLE_HOTKEYS = true at the top of this file.
+  if (ENABLE_HOTKEYS) {
+    document.addEventListener("keydown", onKeyDown, true);
+  }
+
+  // Tampermonkey menu commands (always available regardless of ENABLE_HOTKEYS).
+  /* global GM_registerMenuCommand */
+  GM_registerMenuCommand("Save now (flush)", () => clip(true));
+  GM_registerMenuCommand("Pause/resume auto-capture", () => {
+    _paused = !_paused;
+    showToast(_paused ? "auto-capture paused" : "auto-capture resumed");
+  });
+
   _pollTimer = setInterval(poll, POLL_MS);
 
   // Show a brief "active" toast so the user can confirm the script loaded
